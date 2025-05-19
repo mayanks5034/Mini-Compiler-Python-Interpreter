@@ -47,21 +47,13 @@
 
 ---
 
-## 🖼 Screenshots
+## 🖼 Screenshots 
 
 ### 🔹 Welcome Screen  
-![Welcome](welcomescreen.png)
-
 ### 📘 Learn Python  
-![Learn](learningmodule1.png)  
-![Learn Expanded](learningmodule2.png)
-
 ### 🧪 Testing Module  
-![Test](testmodule.png)
-
 ### 🚀 Code Optimizer  
-![Optimize](optimizemodule.png)
-
+All the above named Screenshot files are attached.
 ---
 
 ## ▶ How to Run
