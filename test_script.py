@@ -1,259 +1,367 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-from io import StringIO
+from tkinter import ttk, font, filedialog
 import sys
-import json
-import os
+import io
+import black
 
-from lexer1 import lexer
-from my_parser1 import parser
-from interpreter1 import Interpreter
-
-# Load user data from JSON file
-USER_DB_FILE = "users.json"
-
-if os.path.exists(USER_DB_FILE):
-    with open(USER_DB_FILE, "r") as f:
-        try:
-            users = json.load(f)
-        except json.JSONDecodeError:
-            users = {}
-else:
-    users = {}
-
-# ==============================
-# Functions
-# ==============================
-
-def save_users_to_file():
-    with open(USER_DB_FILE, "w") as f:
-        json.dump(users, f, indent=4)
-
-def execute_code():
-    """ Execute user's code and display output """
-    code = input_text.get("1.0", tk.END).strip()
-    
-    if not code:
-        return  # Ignore empty input
-
-    # Redirect stdout to capture output
-    old_stdout = sys.stdout
-    sys.stdout = StringIO()
-
-    try:
-        # Remove leading/trailing spaces from each line
-        code = "\n".join([line.strip() for line in code.split("\n") if line.strip()])
-
-        # Lexical analysis
-        lexer.input(code)
-        tokens = list(lexer)
-
-        # Parsing
-        ast = parser.parse(code)
-        if ast:
-            interpreter = Interpreter()
-            result = interpreter.interpret(ast)
-            if result is not None:
-                print("Return Value:", result)
-
-        output_text = sys.stdout.getvalue().strip()
-        if not output_text:
-            output_text = "✅ Execution Completed. No output."
-
-    except Exception as e:
-        output_text = f"❌ Error: {str(e)}"
-
-    finally:
-        sys.stdout = old_stdout  # Restore stdout
-
-    # Update output box
-    output_box.config(state=tk.NORMAL)
-    output_box.delete("1.0", tk.END)
-    output_box.insert(tk.END, output_text)
-    output_box.config(state=tk.DISABLED)
+# ---------- Functions ----------
 
 def go_to_learning():
-    welcome_screen.pack_forget()
-    learning_screen.pack(fill=tk.BOTH, expand=True)
+    hide_all()
+    learn_screen.pack(fill=tk.BOTH, expand=True)
 
 def go_to_testing():
-    welcome_screen.pack_forget()
-    login_screen.pack(fill=tk.BOTH, expand=True)
-
-def back_to_welcome():
-    learning_screen.pack_forget()
-    testing_screen.pack_forget()
-    login_screen.pack_forget()
-    welcome_screen.pack(fill=tk.BOTH, expand=True)
-
-def show_testing_screen():
-    login_screen.pack_forget()
+    hide_all()
     testing_screen.pack(fill=tk.BOTH, expand=True)
 
-def login():
-    username = username_entry.get().strip()
-    password = password_entry.get().strip()
-    
-    if username in users and users[username] == password:
-        messagebox.showinfo("Login Successful", f"Welcome back, {username}!")
-        show_testing_screen()
-    else:
-        messagebox.showerror("Login Failed", "Invalid username or password.")
+def go_to_optimizer():
+    hide_all()
+    optimizer_screen.pack(fill=tk.BOTH, expand=True)
 
-def signup():
-    username = username_entry.get().strip()
-    password = password_entry.get().strip()
-    
-    if not username or not password:
-        messagebox.showwarning("Input Error", "Username and Password cannot be empty.")
+def back_to_welcome():
+    hide_all()
+    welcome_screen.pack(fill=tk.BOTH, expand=True)
+
+def hide_all():
+    welcome_screen.pack_forget()
+    learn_screen.pack_forget()
+    testing_screen.pack_forget()
+    optimizer_screen.pack_forget()
+
+def execute_code():
+    code = input_text.get("1.0", tk.END)
+    output_box.config(state=tk.NORMAL)
+    output_box.delete("1.0", tk.END)
+
+    old_stdout = sys.stdout
+    redirected_output = sys.stdout = io.StringIO()
+
+    try:
+        exec(code, globals())
+        output = redirected_output.getvalue()
+        output_box.insert(tk.END, output)
+    except Exception as e:
+        output_box.insert(tk.END, f"Error: {e}")
+    finally:
+        sys.stdout = old_stdout
+
+    output_box.config(state=tk.DISABLED)
+
+def optimize_code():
+    raw_code = optimizer_input.get("1.0", tk.END).strip()
+    optimizer_output.config(state=tk.NORMAL)
+    optimizer_output.delete("1.0", tk.END)
+
+    if not raw_code:
+        optimizer_output.insert(tk.END, "⚠️ Please enter some Python code to optimize.")
+    else:
+        try:
+            optimized_code = black.format_str(raw_code, mode=black.FileMode())
+            optimizer_output.insert(tk.END, optimized_code)
+        except Exception as e:
+            optimizer_output.insert(tk.END, f"❌ Error during optimization:\n{e}")
+
+    optimizer_output.config(state=tk.DISABLED)
+
+def copy_to_clipboard():
+    optimized_code = optimizer_output.get("1.0", tk.END)
+    root.clipboard_clear()
+    root.clipboard_append(optimized_code)
+    root.update()
+
+def download_optimized_code():
+    optimized_code = optimizer_output.get("1.0", tk.END)
+    if not optimized_code.strip():
         return
 
-    if username in users:
-        messagebox.showerror("Signup Failed", "Username already exists. Please login.")
+    file_path = filedialog.asksaveasfilename(
+        defaultextension=".py",
+        filetypes=[("Python Files", "*.py"), ("All Files", "*.*")],
+        title="Save Optimized Code"
+    )
+    if file_path:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(optimized_code)
+
+def on_mousewheel(event):
+    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+def toggle_section(frame):
+    if frame.winfo_viewable():
+        frame.pack_forget()
     else:
-        users[username] = password
-        save_users_to_file()
-        messagebox.showinfo("Signup Successful", f"Account created for {username}!")
-        show_testing_screen()
+        frame.pack(fill="x", padx=20, pady=(0, 10))
 
-# ==============================
-# GUI Code
-# ==============================
+# ---------- Styling ----------
 
-# Create main window
 root = tk.Tk()
 root.title("🔥 Mini Compiler - Python Interpreter 🔥")
-root.geometry("1100x650")
-root.config(bg="#FFCC33")
+root.geometry("1200x700")
+root.config(bg="#f2f2f2")
 
-# ----------------- Welcome Screen -----------------
-welcome_screen = tk.Frame(root, bg="#FFCC33")
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TButton",
+                font=("Segoe UI", 12, "bold"),
+                padding=10,
+                relief="flat",
+                background="#4CAF50",
+                foreground="white")
+style.map("TButton", background=[("active", "#45a049")])
+
+default_font = font.nametofont("TkDefaultFont")
+default_font.configure(family="Segoe UI", size=12)
+
+# ---------- Updated Welcome Screen ----------
+
+import time
+import threading
+
+def fade_in(widget, delay=10, steps=20):
+    def _fade():
+        for i in range(steps + 1):
+            alpha = i / steps
+            widget.update()
+            widget.attributes('-alpha', alpha)
+            time.sleep(delay / 1000)
+    threading.Thread(target=_fade).start()
+
+# ---------- Welcome Screen Upgrade ----------
+def on_enter(event):
+    event.widget.config(bg="#0D47A1")
+
+def on_leave(event):
+    event.widget.config(bg="#1976D2")
+
+welcome_screen = tk.Frame(root, bg="#1E1E2F")
 welcome_screen.pack(fill=tk.BOTH, expand=True)
 
-heading_label = tk.Label(welcome_screen, text="🔥 Mini Compiler - Python Interpreter 🔥", font=("Arial", 22, "bold"), bg="#FFCC33", fg="darkblue")
-heading_label.pack(pady=20)
+root.after(100, lambda: fade_in(root))
 
-project_desc = tk.Label(welcome_screen, 
-                        text="This is a Python-based mini compiler that allows you to learn and test Python skills. "
-                             "Our goal is to provide a tool that helps you learn the basics of Python programming and test your skills "
-                             "through an interactive platform. The project features a code editor, output display, and more.",
-                        font=("Arial", 17), bg="#FFCC33", fg="black", justify=tk.LEFT, wraplength=800)
-project_desc.pack(padx=20, pady=20, fill=tk.X)
+# Header
+tk.Label(
+    welcome_screen,
+    text="🔥 Mini Compiler - Python Interpreter 🔥",
+    font=("Segoe UI", 28, "bold"),
+    bg="#1E1E2F",
+    fg="#FFD700"
+).pack(pady=(30, 10))
 
-team_label = tk.Label(welcome_screen, text="Project Team: \n\n1. Mayank Singh - Backend (Interpreter/Compiler)\n2. Piyush Shastri - Frontend (GUI)\n"
-                                            "3. Kartik Kapri - Backend (Interpreter/Compiler)\n4. Kumkum Pandey - Frontend (GUI)",
-                      font=("Arial", 14, "italic","bold"), bg="#FFCC33", fg="black", anchor="w")
-team_label.pack(pady=10, padx=20, fill=tk.X)
+tk.Label(
+    welcome_screen,
+    text="Learn, test and optimize Python code interactively.",
+    font=("Segoe UI", 16),
+    bg="#1E1E2F",
+    fg="#DDDDDD"
+).pack(pady=(0, 20))
 
-button_frame = tk.Frame(welcome_screen, bg="#FFCC33")
-button_frame.pack(pady=20)
+tk.Label(
+    welcome_screen,
+    text="Project Team:\nMayank Singh, Piyush Kumar, Kartik Kapri, Kumkum Pandey",
+    font=("Segoe UI", 12, "italic"),
+    bg="#1E1E2F",
+    fg="#BBBBBB"
+).pack(pady=(0, 30))
 
-learn_button = tk.Button(button_frame, text="Learn Python", command=go_to_learning, font=("Arial", 14, "bold"), bg="green", fg="white", width=15)
-learn_button.pack(pady=10)
+# Navigation Buttons
+nav_buttons = tk.Frame(welcome_screen, bg="#1E1E2F")
+nav_buttons.pack(pady=10)
 
-test_button = tk.Button(button_frame, text="Test Your Skills", command=go_to_testing, font=("Arial", 14, "bold"), bg="orange", fg="white", width=15)
-test_button.pack(pady=10)
+for i, (text, cmd) in enumerate([
+    ("📘 Learn Python", go_to_learning),
+    ("🧪 Test Your Skills", go_to_testing),
+    ("🚀 Optimize Code", go_to_optimizer),
+]):
+    btn = tk.Button(
+        nav_buttons, text=text, font=("Segoe UI", 13, "bold"),
+        bg="#1976D2", fg="white", activebackground="#1565C0", cursor="hand2",
+        padx=20, pady=10, relief="flat", command=cmd
+    )
+    btn.grid(row=0, column=i, padx=15)
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
 
-# ----------------- Login/Signup Screen -----------------
-login_screen = tk.Frame(root, bg="lightblue")
+# Topics Grid
+topic_frame = tk.LabelFrame(
+    welcome_screen, text="📚 Python Topics", font=("Segoe UI", 14, "bold"),
+    bg="#292A3E", fg="#FFC107", bd=2, relief="ridge", padx=20, pady=10
+)
+topic_frame.pack(pady=30, padx=30, fill="both", expand=True)
 
-login_label = tk.Label(login_screen, text="🔒 Login or Signup", font=("Arial", 22, "bold"), bg="lightblue", fg="darkblue")
-login_label.pack(pady=20)
+topics = [
+    "1. Variables & Data Types", "2. Operators", "3. Conditional Statements",
+    "4. Loops", "5. Functions", "6. Data Structures",
+    "7. File Handling", "8. Object-Oriented Programming",
+    "9. Exception Handling", "10. Modules & Packages"
+]
 
-username_label = tk.Label(login_screen, text="Username:", font=("Arial", 16), bg="lightblue")
-username_label.pack(pady=5)
-username_entry = tk.Entry(login_screen, font=("Arial", 14))
-username_entry.pack(pady=5)
+def on_topic_click(label):
+    label.config(bg="#4CAF50", fg="white")
+    root.after(500, lambda: label.config(bg="#37474F", fg="#FFC107"))
 
-password_label = tk.Label(login_screen, text="Password:", font=("Arial", 16), bg="lightblue")
-password_label.pack(pady=5)
-password_entry = tk.Entry(login_screen, show="*", font=("Arial", 14))
-password_entry.pack(pady=5)
+for i, topic in enumerate(topics):
+    lbl = tk.Label(
+        topic_frame, text=f"📌 {topic}", bg="#37474F", fg="#FFC107",
+        font=("Segoe UI", 12, "bold"), padx=10, pady=5,
+        anchor="w", cursor="hand2"
+    )
+    lbl.grid(row=i//2, column=i%2, sticky="we", padx=10, pady=5)
+    lbl.bind("<Enter>", lambda e, l=lbl: l.config(bg="#546E7A"))
+    lbl.bind("<Leave>", lambda e, l=lbl: l.config(bg="#37474F"))
+    lbl.bind("<Button-1>", lambda e, l=lbl: on_topic_click(l))
 
-login_btn = tk.Button(login_screen, text="Login", command=login, font=("Arial", 14, "bold"), bg="green", fg="white", width=15)
-login_btn.pack(pady=10)
+# End of Welcome Screen Upgrade
 
-signup_btn = tk.Button(login_screen, text="Signup", command=signup, font=("Arial", 14, "bold"), bg="purple", fg="white", width=15)
-signup_btn.pack(pady=10)
 
-back_btn_login = tk.Button(login_screen, text="Back to Welcome", command=back_to_welcome, font=("Arial", 12, "bold"), bg="red", fg="white")
-back_btn_login.pack(pady=10)
+# ---------- Learn Python Screen ----------
 
-# ----------------- Learning Screen -----------------
-learning_screen = tk.Frame(root, bg="lightgreen")
+learn_screen = tk.Frame(root, bg="#E3F2FD")
 
-learning_label = tk.Label(learning_screen, text="🔸 Python Learning Module 🔸", font=("Arial", 22, "bold"), bg="lightgreen", fg="darkgreen")
-learning_label.pack(pady=20)
+tk.Label(learn_screen, text="📘 Learn Python", font=("Segoe UI", 22, "bold"),
+         bg="#E3F2FD", fg="#0D47A1").pack(pady=20)
 
-learning_content = tk.Label(learning_screen, text="🔹 Python Basics 🔹\n\n1. Introduction*: Python is an interpreted, high-level, general-purpose programming language. It's known for its readability and ease of use.\n"
-                                                   "2. Variables & Data Types*: Python supports different data types like integers, floats, strings, and booleans. Variables are used to store values.\n"
-                                                   "3. Functions*: Functions in Python are blocks of reusable code that can be called with different inputs.\n"
-                                                   "4. Loops*: Loops are used to repeat a block of code multiple times. Python supports `for` and `while` loops.\n"
-                                                   "5. Conditionals*: Conditional statements like `if`, `elif`, and `else` allow you to control the flow of your program.\n\n"
-                                                   "🔹 Advanced Topics 🔹\n\n1. Classes & Objects*: Python is an object-oriented language, which means it allows the creation of classes and objects.\n"
-                                                   "2. Exception Handling*: Python provides `try`, `except`, and `finally` blocks to handle exceptions during runtime.\n"
-                                                   "3. File I/O*: Python can interact with files. You can read, write, and manipulate files using built-in functions.\n"
-                                                   "4. Libraries (NumPy, Pandas)*: These libraries are used for data manipulation, analysis, and scientific computing.",
-                            font=("Arial", 15), bg="lightgreen", fg="black", justify=tk.LEFT, wraplength=800)
-learning_content.pack(padx=20, pady=20)
+scroll_frame = tk.Frame(learn_screen)
+scroll_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-back_button_learning = tk.Button(learning_screen, text="Back to Welcome", command=back_to_welcome, font=("Arial", 12, "bold"), bg="red", fg="white")
-back_button_learning.pack(pady=10)
+canvas = tk.Canvas(scroll_frame, bg="#ffffff", highlightthickness=0)
+scrollbar = ttk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
+scrollable_content = tk.Frame(canvas, bg="#ffffff")
 
-# ----------------- Testing Screen -----------------
-testing_screen = tk.Frame(root, bg="lightyellow")
+canvas.create_window((0, 0), window=scrollable_content, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
+scrollable_content.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-testing_label = tk.Label(testing_screen, text="🔸 Python Testing Module 🔸", font=("Arial", 22, "bold"), bg="lightyellow", fg="darkorange")
-testing_label.pack(pady=20)
+canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-main_frame = tk.Frame(testing_screen, bg="lightyellow")
-main_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+sections = {
+    "🔤 Variables & Data Types": "Python supports various data types like int, float, string, and boolean.",
+    "🔁 Loops": "Use 'for' or 'while' loops to iterate over sequences or repeat actions.",
+    "📦 Functions": "Functions help you reuse code. Define using 'def'.",
+    "📄 File Handling": "Python can open, read, and write files using the 'open' function.",
+    "🧪 Exception Handling": "Use try-except blocks to manage errors gracefully."
+}
 
-paned_window = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5, bg="lightyellow")
-paned_window.pack(fill=tk.BOTH, expand=True)
+for title, desc in sections.items():
+    container = tk.Frame(scrollable_content, bg="#E3F2FD", bd=1, relief="solid")
+    title_label = tk.Label(container, text=title, font=("Segoe UI", 14, "bold"),
+                           bg="#C5CAE9", fg="#1A237E", cursor="hand2", anchor="w", padx=10)
+    title_label.pack(fill="x")
 
-left_frame = tk.Frame(paned_window, bg="#252526")
-paned_window.add(left_frame, stretch="always")
+    content = tk.Label(container, text=desc, font=("Segoe UI", 12),
+                       wraplength=1000, justify="left", bg="#E8EAF6", anchor="w", padx=10)
+    content.pack_forget()
 
-tk.Label(left_frame, text="✍️ Code Editor:", font=("Arial", 14, "bold"), bg="#252526", fg="lightgreen").pack(anchor="w")
+    title_label.bind("<Button-1>", lambda e, frame=content: toggle_section(frame))
+    container.pack(fill="x", padx=20, pady=10)
 
-y_scrollbar = tk.Scrollbar(left_frame, orient=tk.VERTICAL)
-x_scrollbar = tk.Scrollbar(left_frame, orient=tk.HORIZONTAL)
+ttk.Button(learn_screen, text="🔙 Back", command=back_to_welcome).pack(pady=10)
 
-input_text = tk.Text(left_frame, height=18, font=("Courier", 12), wrap="none", bg="#1E1E1E", fg="white", insertbackground="white",
-                     yscrollcommand=y_scrollbar.set, xscrollcommand=x_scrollbar.set)
-input_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+# ---------- Testing Screen ----------
 
-y_scrollbar.config(command=input_text.yview)
-x_scrollbar.config(command=input_text.xview)
-y_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-x_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+import keyword
+import re
 
-right_frame = tk.Frame(paned_window, bg="#252526")
-paned_window.add(right_frame, stretch="always")
+# ---------- Updated Testing Screen with Syntax Highlighting ----------
 
-tk.Label(right_frame, text="📜 Output:", font=("Arial", 14, "bold"), bg="#252526", fg="orange").pack(anchor="w")
+testing_screen = tk.Frame(root, bg="#F1F8E9")
 
-output_y_scrollbar = tk.Scrollbar(right_frame, orient=tk.VERTICAL)
-output_x_scrollbar = tk.Scrollbar(right_frame, orient=tk.HORIZONTAL)
+tk.Label(testing_screen, text="🧪 Python Testing Module",
+         font=("Segoe UI", 22, "bold"), bg="#F1F8E9", fg="#2E7D32").pack(pady=20)
 
-output_box = tk.Text(right_frame, height=18, font=("Courier", 12), wrap="none", state=tk.DISABLED, bg="#1E1E1E", fg="white", insertbackground="white",
-                     yscrollcommand=output_y_scrollbar.set, xscrollcommand=output_x_scrollbar.set)
-output_box.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+editor_output_pane = tk.PanedWindow(testing_screen, orient=tk.HORIZONTAL, sashwidth=5)
+editor_output_pane.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
 
-output_y_scrollbar.config(command=output_box.yview)
-output_x_scrollbar.config(command=output_box.xview)
-output_y_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-output_x_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+# -------- Left: Code Editor --------
+editor_frame = tk.Frame(editor_output_pane, bg="#1E1E1E")
+editor_output_pane.add(editor_frame, stretch="always")
 
-button_frame = tk.Frame(testing_screen, bg="lightyellow")
-button_frame.pack(pady=5)
+tk.Label(editor_frame, text="✍️ Code Editor", font=("Segoe UI", 14, "bold"),
+         bg="#1E1E1E", fg="#81C784", anchor="w").pack(fill="x", padx=10, pady=(10, 0))
 
-execute_button = tk.Button(button_frame, text="▶ Run Code", command=execute_code, font=("Arial", 14, "bold"), bg="blue", fg="white", width=15)
-execute_button.pack(pady=5)
+input_text = tk.Text(editor_frame, height=20, font=("Consolas", 13), wrap="none",
+                     bg="#2E2E2E", fg="white", insertbackground="white", undo=True)
+input_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-back_button_testing = tk.Button(button_frame, text="Back to Welcome", command=back_to_welcome, font=("Arial", 12, "bold"), bg="red", fg="white")
-back_button_testing.pack(pady=5)
+# Syntax Highlighting Tags
+input_text.tag_configure("keyword", foreground="#C792EA")
+input_text.tag_configure("string", foreground="#F78C6C")
+input_text.tag_configure("comment", foreground="#546E7A")
 
-# ==============================
+# Syntax Highlighting Logic
+def highlight_syntax(event=None):
+    code = input_text.get("1.0", "end-1c")
+    input_text.tag_remove("keyword", "1.0", tk.END)
+    input_text.tag_remove("string", "1.0", tk.END)
+    input_text.tag_remove("comment", "1.0", tk.END)
+
+    for match in re.finditer(r'\b(' + r'|'.join(keyword.kwlist) + r')\b', code):
+        start = f"1.0+{match.start()}c"
+        end = f"1.0+{match.end()}c"
+        input_text.tag_add("keyword", start, end)
+
+    for match in re.finditer(r'(\".*?\"|\'.*?\')', code):
+        start = f"1.0+{match.start()}c"
+        end = f"1.0+{match.end()}c"
+        input_text.tag_add("string", start, end)
+
+    for match in re.finditer(r'#.*', code):
+        start = f"1.0+{match.start()}c"
+        end = f"1.0+{match.end()}c"
+        input_text.tag_add("comment", start, end)
+
+input_text.bind("<KeyRelease>", highlight_syntax)
+
+# -------- Right: Output Console --------
+output_frame = tk.Frame(editor_output_pane, bg="#1E1E1E")
+editor_output_pane.add(output_frame, stretch="always")
+
+tk.Label(output_frame, text="📜 Output Console", font=("Segoe UI", 14, "bold"),
+         bg="#1E1E1E", fg="#FFB74D", anchor="w").pack(fill="x", padx=10, pady=(10, 0))
+
+output_box = tk.Text(output_frame, height=20, font=("Consolas", 13), wrap="none",
+                     state=tk.DISABLED, bg="#263238", fg="#ECEFF1", insertbackground="white")
+output_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+# -------- Bottom Controls --------
+button_frame = tk.Frame(testing_screen, bg="#F1F8E9")
+button_frame.pack(pady=10)
+
+ttk.Button(button_frame, text="▶ Run Code", command=execute_code).grid(row=0, column=0, padx=10)
+ttk.Button(button_frame, text="🔙 Back", command=back_to_welcome).grid(row=0, column=1, padx=10)
+
+# ---------- Optimizer Screen ----------
+
+optimizer_screen = tk.Frame(root, bg="#f3e5f5")
+
+tk.Label(optimizer_screen, text="🚀 Python Code Optimizer ",
+         font=("Segoe UI", 22, "bold"), bg="#f3e5f5", fg="#4A148C").pack(pady=20)
+
+input_frame = tk.Frame(optimizer_screen, bg="#f3e5f5")
+input_frame.pack(fill=tk.BOTH, expand=True, padx=10)
+
+tk.Label(input_frame, text="📝 Enter Code:", font=("Segoe UI", 13, "bold"),
+         bg="#f3e5f5", fg="#6A1B9A").pack(anchor="w")
+
+optimizer_input = tk.Text(input_frame, height=10, font=("Consolas", 12), wrap="word",
+                          bg="#fff", fg="#000", insertbackground="black")
+optimizer_input.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+tk.Label(input_frame, text="✅ Optimized Code:", font=("Segoe UI", 13, "bold"),
+         bg="#f3e5f5", fg="#4A148C").pack(anchor="w", pady=(10, 0))
+
+optimizer_output = tk.Text(input_frame, height=10, font=("Consolas", 12), wrap="word",
+                           state=tk.DISABLED, bg="#e1bee7", fg="#1A1A1A", insertbackground="black")
+optimizer_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+button_frame = tk.Frame(optimizer_screen, bg="#f3e5f5")
+button_frame.pack(pady=10)
+
+ttk.Button(button_frame, text="🚀 Optimize Code", command=optimize_code).grid(row=0, column=0, padx=10)
+ttk.Button(button_frame, text="📋 Copy to Clipboard", command=copy_to_clipboard).grid(row=0, column=1, padx=10)
+ttk.Button(button_frame, text="💾 Download Code", command=download_optimized_code).grid(row=0, column=2, padx=10)
+ttk.Button(button_frame, text="🔙 Back", command=back_to_welcome).grid(row=0, column=3, padx=10)
+
+# ----------
 root.mainloop()
