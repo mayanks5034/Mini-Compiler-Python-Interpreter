@@ -50,17 +50,17 @@
 ## 🖼 Screenshots
 
 ### 🔹 Welcome Screen  
-![Welcome](welcome screen.png)
+![Welcome](welcomescreen.png)
 
 ### 📘 Learn Python  
-![Learn](learning module 1.png)  
-![Learn Expanded](learning module 2.png)
+![Learn](learningmodule1.png)  
+![Learn Expanded](learningmodule2.png)
 
 ### 🧪 Testing Module  
-![Test](test module.png)
+![Test](testmodule.png)
 
 ### 🚀 Code Optimizer  
-![Optimize](optimize module.png)
+![Optimize](optimizemodule.png)
 
 ---
 
