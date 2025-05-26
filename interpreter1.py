@@ -1,204 +1,248 @@
-from ast_nodes1 import ( 
-    Number, Identifier, BinaryOp, UnaryOp, Assign, Boolean, Print, IfElse, WhileLoop, 
-    FunctionDef, FunctionCall, Return, String, ForLoop, IndexNode, ListNode, TryExcept
-)
+from ast_nodes import *
 
 class Interpreter:
+    """Interpreter for the custom AST."""
     def __init__(self):
-        self.variables = {}  # Stores variable values
-        self.functions = {}  # Stores function definitions
-    
-    def interpret(self, statements):
-        """Interprets the AST nodes (list of statements)."""
-        result = None  
-        for stmt in statements:
-            if isinstance(stmt, Assign):
-                self.variables[stmt.name] = self.evaluate(stmt.expr)
-            elif isinstance(stmt, Print):
-                self.evaluate(stmt.expr)
-            elif isinstance(stmt, IfElse):
-                self.execute_if_else(stmt)
-            elif isinstance(stmt, WhileLoop):
-                self.execute_while(stmt)
-            elif isinstance(stmt, ForLoop):
-                self.execute_for_loop(stmt)
-            elif isinstance(stmt, FunctionDef):
-                self.functions[stmt.name] = stmt  
-            elif isinstance(stmt, FunctionCall):
-                result = self.execute_function(stmt)
-            elif isinstance(stmt, Return):
-                return self.evaluate(stmt.value)  
-            elif isinstance(stmt, TryExcept):  # ✅ Handling Try-Except
-                self.execute_try_except(stmt)
-        return result
+        self.environment = {}
+        self.functions = {}
+        self.return_value = None
+        self.in_loop = False
+        self.break_loop = False
+        self.continue_loop = False
 
     def evaluate(self, node):
-        """Evaluates expressions"""
-        if isinstance(node, Number):
-            return node.value
-        elif isinstance(node, Boolean):
-            return node.value
-        elif isinstance(node, String):
-            return node.value
-        elif isinstance(node, Identifier):
-            return self.variables.get(node.name, None)
-
-        elif isinstance(node, UnaryOp):  
-            operand = self.evaluate(node.expr)  
-            if node.op == 'not':
-                return not bool(operand)  
-            elif node.op == '-':
-                return -operand  
-            elif node.op == '+':
-                return +operand  
-
-        elif isinstance(node, BinaryOp):
-            left = self.evaluate(node.left)
-            right = self.evaluate(node.right)
-            if node.op == '+':
-                return left + right if isinstance(left, (int, float)) else str(left) + str(right)
-            elif node.op == '-':
-                return left - right
-            elif node.op == '*':
-                return left * right
-            elif node.op == '/':
-                return left / right if right != 0 else float('inf')
-            elif node.op == '%':
-                return left % right
-            elif node.op == 'and':
-                return bool(left and right)
-            elif node.op == 'or':
-                return bool(left or right)
-            elif node.op == '>':
-                return left > right
-            elif node.op == '<':
-                return left < right
-            elif node.op == '>=':
-                return left >= right
-            elif node.op == '<=':
-                return left <= right
-            elif node.op == '==':
-                return left == right
-            elif node.op == '!=':
-                return left != right
-        
-        elif isinstance(node, ListNode):
-            return [self.evaluate(item) for item in node.elements]
-
-        elif isinstance(node, IndexNode):
-            list_obj = self.evaluate(node.list_expr)
-            index = self.evaluate(node.index_expr)
-            if isinstance(list_obj, list) and isinstance(index, int):
-                return list_obj[index]
-            else:
-                print(f"Error: Invalid index '{index}' for list {list_obj}")
-                return None
-
-        elif isinstance(node, FunctionCall):
-            if node.name == "len":  # ✅ Handling `len()`
-                return self.execute_len(node)
-            elif isinstance(node.name, Identifier):  # Function calls
-                return self.execute_function(node)
-
-        elif isinstance(node, list):
+        """Evaluate an AST node."""
+        if isinstance(node, list):
             return [self.evaluate(item) for item in node]
-        
+        if node is None:
+            return None
+        method_name = f'evaluate_{node.__class__.__name__}'
+        method = getattr(self, method_name, self.generic_evaluate)
+        return method(node)
+
+    def generic_evaluate(self, node):
+        raise Exception(f'No evaluate_{node.__class__.__name__} method')
+
+    def evaluate_Number(self, node):
+        return node.value
+
+    def evaluate_String(self, node):
+        return node.value
+
+    def evaluate_Boolean(self, node):
+        return node.value
+
+    def evaluate_Identifier(self, node):
+        if node.name in self.environment:
+            return self.environment[node.name]
+        elif node.name in self.functions:
+            return self.functions[node.name]
+        raise Exception(f"Undefined variable or function: {node.name}")
+
+    def evaluate_BinaryOp(self, node):
+        left = self.evaluate(node.left)
+        right = self.evaluate(node.right)
+        if node.op == '+':
+            return left + right
+        elif node.op == '-':
+            return left - right
+        elif node.op == '*':
+            return left * right
+        elif node.op == '/':
+            if right == 0:
+                raise Exception("Division by zero")
+            return left / right
+        elif node.op == '%':
+            if right == 0:
+                raise Exception("Modulo by zero")
+            return left % right
+        elif node.op == '==':
+            return left == right
+        elif node.op == '!=':
+            return left != right
+        elif node.op == '<':
+            return left < right
+        elif node.op == '>':
+            return left > right
+        elif node.op == '<=':
+            return left <= right
+        elif node.op == '>=':
+            return left >= right
+        elif node.op == 'and':
+            return left and right
+        elif node.op == 'or':
+            return left or right
+        else:
+            raise Exception(f"Unknown operator: {node.op}")
+
+    def evaluate_UnaryOp(self, node):
+        expr = self.evaluate(node.expr)
+        if node.op == '-':
+            return -expr
+        elif node.op == 'not':
+            return not expr
+        else:
+            raise Exception(f"Unknown unary operator: {node.op}")
+
+    def evaluate_Assign(self, node):
+        value = self.evaluate(node.value)
+        self.environment[node.name.name] = value
+        return value
+
+    def evaluate_Print(self, node):
+        value = self.evaluate(node.expr)
+        print(value)
+        return value
+
+    def evaluate_IfElse(self, node):
+        condition = self.evaluate(node.condition)
+        if condition:
+            return self.evaluate(node.if_body)
+        elif node.else_body:
+            return self.evaluate(node.else_body)
         return None
 
-    def execute_len(self, function_call):
-        """Executes built-in function len()"""
-        if len(function_call.arguments) != 1:
-            print(f"Error: 'len' function expects 1 argument, got {len(function_call.arguments)}")
-            return None
-
-        obj = self.evaluate(function_call.arguments[0])
-        if isinstance(obj, (list, str)):
-            return len(obj)
-        else:
-            print(f"Error: 'len' function cannot be used on type {type(obj).__name__}")
-            return None
-
-    def execute_try_except(self, try_except_node):
-        """Executes try-except blocks"""
-        try:
-            self.interpret(try_except_node.try_body)
-        except Exception as e:
-            print(f"Exception Caught: {e}")
-            self.interpret(try_except_node.except_body)
-
-    def execute_if_else(self, if_else_node):
-        """Executes if-else statements"""
-        condition_result = self.evaluate(if_else_node.condition)
-        if condition_result:
-            self.interpret(if_else_node.if_body)
-        else:
-            self.interpret(if_else_node.else_body)
-
-    def execute_while(self, while_node):
-        """Executes while loops"""
-        while self.evaluate(while_node.condition):
-            self.interpret(while_node.body)
-
-    def execute_for_loop(self, for_node):
-        """Executes for loops"""
-        iterable = self.evaluate(for_node.iterable)
-
-        if isinstance(for_node.iterable, FunctionCall) and for_node.iterable.name == "range":
-            if len(for_node.iterable.arguments) != 1:
-                print(f"Error: 'range' function expects 1 argument, got {len(for_node.iterable.arguments)}")
-                return
-            evaluated_arg = self.evaluate(for_node.iterable.arguments[0])
-            if not isinstance(evaluated_arg, int):
-                print(f"Error: 'range' function expects an integer argument, got {evaluated_arg}")
-                return
-            iterable = range(evaluated_arg)  
-
-        if iterable is None:
-            print(f"Error: Loop iterable '{for_node.iterable}' is None.")
-            return  
-
-        if not isinstance(iterable, (list, range, str)):  
-            print(f"Error: '{iterable}' is not iterable")
-            return
-
-        prev_value = self.variables.get(for_node.variable, None)
-
-        for value in iterable:
-            self.variables[for_node.variable] = value  
-            self.interpret(for_node.body)  
-
-        if prev_value is not None:
-            self.variables[for_node.variable] = prev_value
-        else:
-            del self.variables[for_node.variable]  
-
-    def execute_function(self, function_call):
-        """Executes function calls"""
-        func_def = self.functions.get(function_call.name)
-        if not func_def:
-            print(f"Error: Function '{function_call.name}' is not defined")
-            return None
-
-        if len(func_def.parameters) != len(function_call.arguments):
-            print(f"Error: Function '{function_call.name}' expects {len(func_def.parameters)} arguments, but got {len(function_call.arguments)}")
-            return None
-
-        local_scope = {param: self.evaluate(arg) for param, arg in zip(func_def.parameters, function_call.arguments)}
-        previous_scope = self.variables.copy()  
-        self.variables.update(local_scope)
-
-        return_value = None
-        for stmt in func_def.body:
-            return_value = self.interpret([stmt])
-            if return_value is not None:  
+    def evaluate_WhileLoop(self, node):
+        self.in_loop = True
+        result = None
+        while self.evaluate(node.condition):
+            if self.break_loop:
+                self.break_loop = False
                 break
+            if self.continue_loop:
+                self.continue_loop = False
+                continue
+            result = self.evaluate(node.body)
+        self.in_loop = False
+        return result
 
-        self.variables = previous_scope  
-        return return_value
+    def evaluate_ForLoop(self, node):
+        self.in_loop = True
+        result = None
+        iterable = self.evaluate(node.iterable)
+        if isinstance(iterable, range):
+            for i in iterable:
+                if self.break_loop:
+                    self.break_loop = False
+                    break
+                if self.continue_loop:
+                    self.continue_loop = False
+                    continue
+                self.environment[node.var.name] = i
+                result = self.evaluate(node.body)
+        elif isinstance(iterable, (list, tuple)):
+            for item in iterable:
+                if self.break_loop:
+                    self.break_loop = False
+                    break
+                if self.continue_loop:
+                    self.continue_loop = False
+                    continue
+                self.environment[node.var.name] = item
+                result = self.evaluate(node.body)
+        else:
+            raise Exception(f"Cannot iterate over {type(iterable)}")
+        self.in_loop = False
+        return result
+
+    def evaluate_FunctionDef(self, node):
+        self.functions[node.name] = node
+        return None
+
+    def evaluate_FunctionCall(self, node):
+        if node.name not in self.functions:
+            raise Exception(f"Undefined function: {node.name}")
+        func = self.functions[node.name]
+        if not isinstance(func, FunctionDef):
+            raise Exception(f"{node.name} is not a function")
+        old_env = self.environment.copy()
+        self.environment = {}
+        args = [self.evaluate(arg) for arg in node.args]
+        for param, arg in zip(func.params, args):
+            self.environment[param.name] = arg
+        result = self.evaluate(func.body)
+        self.environment = old_env
+        return result
+
+    def evaluate_Return(self, node):
+        self.return_value = self.evaluate(node.expr)
+        return self.return_value
+
+    def evaluate_Break(self, node):
+        if not self.in_loop:
+            raise Exception("Break statement outside loop")
+        self.break_loop = True
+        return None
+
+    def evaluate_Continue(self, node):
+        if not self.in_loop:
+            raise Exception("Continue statement outside loop")
+        self.continue_loop = True
+        return None
+
+    def evaluate_ListNode(self, node):
+        return [self.evaluate(elem) for elem in node.elements]
+
+    def evaluate_IndexNode(self, node):
+        lst = self.evaluate(node.expr)
+        idx = self.evaluate(node.index)
+        if not isinstance(lst, (list, tuple, str)):
+            raise Exception(f"Cannot index {type(lst)}")
+        if not isinstance(idx, int):
+            raise Exception("Index must be an integer")
+        if idx < 0 or idx >= len(lst):
+            raise Exception("Index out of range")
+        return lst[idx]
+
+    def evaluate_TryExcept(self, node):
+        try:
+            return self.evaluate(node.try_body)
+        except Exception:
+            return self.evaluate(node.except_body)
+
+    def evaluate_LenFunction(self, node):
+        expr = self.evaluate(node.expr)
+        if not isinstance(expr, (list, tuple, str)):
+            raise Exception(f"Cannot get length of {type(expr)}")
+        return len(expr)
+
+    def evaluate_StringMethod(self, node):
+        string_obj = self.evaluate(node.string_obj)
+        if not isinstance(string_obj, str):
+            raise Exception(f"Cannot call string method on {type(string_obj)}")
+        args = [self.evaluate(arg) for arg in node.args]
+        if node.method == 'upper':
+            return string_obj.upper()
+        elif node.method == 'lower':
+            return string_obj.lower()
+        elif node.method == 'strip':
+            return string_obj.strip()
+        elif node.method == 'replace' and len(args) == 2:
+            return string_obj.replace(args[0], args[1])
+        else:
+            raise Exception(f"Unknown string method: {node.method}")
+
+    def evaluate_RangeCall(self, node):
+        start = self.evaluate(node.start) if node.start is not None else 0
+        stop = self.evaluate(node.stop) if node.stop is not None else None
+        step = self.evaluate(node.step) if node.step is not None else 1
+        if not all(isinstance(x, int) for x in [start, stop, step] if x is not None):
+            raise Exception("Range arguments must be integers")
+        return range(start, stop, step)
+
+    def interpret(self, statements):
+        """Interpret a list of statements."""
+        result = None
+        for statement in statements:
+            result = self.evaluate(statement)
+            if self.return_value is not None:
+                return self.return_value
+        return result
 
     def execute(self, code):
-        try:
-            self.interpret(code)
-        except Exception as e:
-            print(f"Runtime Error: {e}")
-
+        """Execute code by parsing and interpreting it."""
+        from myparser import parser
+        ast = parser.parse(code)
+        if ast is None:
+            raise Exception("Failed to parse code")
+        return self.interpret(ast)
